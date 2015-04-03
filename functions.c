@@ -56,12 +56,7 @@ int load(char *filename)
  */
 void fetch(InstInfo *instruction)
 {
-  unsigned int decimalInst = (unsigned int) instmem[pc-1];
-  instruction->inst = decimalInst >> 26;
-  instruction->input1 = (decimalInst >> 16) & 0b11111;
-  instruction->input2 = (decimalInst >> 11) & 0b11111;
-  instruction->destdata = (decimalInst >> 21) & 0b11111;
-  
+  instruction->inst = instmem[pc-1];
   pc++;
 }
 
