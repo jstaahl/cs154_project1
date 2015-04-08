@@ -4,6 +4,24 @@
 #include <strings.h>
 #include "functions.h"
 
+// Constants
+
+#define OP_CODE_ADD 0b100000
+#define OP_CODE_ADDI 0b110001
+#define OP_CODE_AND 0b100000
+#define OP_CODE_SUB 0b100000
+#define OP_CODE_SGT 0b100000
+#define OP_CODE_LW 0b010001
+#define OP_CODE_SW 0b010010
+#define OP_CODE_BEQ 0b001010
+#define OP_CODE_JR 0b100101
+#define OP_CODE_JAL 0b001000
+
+#define FUNC_CODE_ADD 0b100000
+#define FUNC_CODE_AND 0b100100
+#define FUNC_CODE_SUB 0b101000
+#define FUNC_CODE_SGT 0b110000
+
 // these are the structures used in this simulator
 
 
@@ -56,32 +74,59 @@ int load(char *filename)
  */
 void fetch(InstInfo *instruction)
 {
-  instruction->inst = instmem[pc-1];
+  instruction->inst = instmem[pc];
   pc++;
 }
 
 /* decode
  *
  * This decodes an instruction.  It looks at the inst field of the 
- * instruction.  Then it decodes the fields into the fields data 
- * member.  The first one is given to you.
+ * instruction.  Then it decodes the fields into the field's data 
+ * members.  The first one is given to you.
  *
  * Then it checks the op code.  Depending on what the opcode is, it
  * fills in all of the signals for that instruction.
  */
 void decode(InstInfo *instruction)
 {
+
 	// fill in the signals and fields
 	int val = instruction->inst;
-	int op, func;
 	instruction->fields.op = (val >> 26) & 0x03f;
 	// fill in the rest of the fields here
-
+	instruction->fields.rs = (val >> 21) & 0x01f;
+	instruction->fields.rt = (val >> 16) & 0x01f;
+	instruction->fields.rd = (val >> 11) & 0x01f;
+	instruction->fields.imm = (val << 16) >> 16;
+	instruction->fields.func = val & 0x03f;
 	// now fill in the signals
 
-	// if it is an add (example only, please modify the code accordingly!)
-	{
+	instruction->signals.asrc = -1;
+	instruction->signals.rdst = -1;
+	instruction->signals.mtr = -1;
+
+	int func = instruction->fields.func;
+
+	if (instruction->fields.op == OP_CODE_ADDI) {
+
 		instruction->signals.aluop = 2;
+		
+		instruction->signals.asrc = 1;
+		instruction->signals.rw = 1;
+		instruction->signals.mw = 0;
+		instruction->signals.mr = 0;
+		instruction->signals.mtr = 0;
+		instruction->signals.btype = 0;
+		instruction->signals.rdst = 0;
+
+		sprintf(instruction->string,"addi $%d, $%d, %d",
+				instruction->fields.rt, instruction->fields.rs, 
+				instruction->fields.imm);
+
+		instruction->destreg = instruction->fields.rt;
+
+	} else if (instruction->fields.op == OP_CODE_ADD) {
+
 		instruction->signals.mw = 0;
 		instruction->signals.mr = 0;
 		instruction->signals.mtr = 0;
@@ -89,14 +134,108 @@ void decode(InstInfo *instruction)
 		instruction->signals.btype = 0;
 		instruction->signals.rdst = 1;
 		instruction->signals.rw = 1;
-		sprintf(instruction->string,"add $%d, $%d, $%d",
-			instruction->fields.rd, instruction->fields.rs, 
-			instruction->fields.rt);
+
 		instruction->destreg = instruction->fields.rd;
+		instruction->s1data = instruction->fields.rs;
+		instruction->s2data = instruction->fields.rt;
+
+		if (func == FUNC_CODE_ADD) {
+
+			instruction->signals.aluop = 2;
+			
+			sprintf(instruction->string,"add $%d, $%d, $%d",
+				instruction->fields.rd, instruction->fields.rs, 
+				instruction->fields.rt);
+
+		} else if (func == FUNC_CODE_AND) {
+
+			instruction->signals.aluop = 0;
+
+			sprintf(instruction->string,"and $%d, $%d, $%d",
+				instruction->fields.rd, instruction->fields.rs, 
+				instruction->fields.rt);
+
+		} else if (func == FUNC_CODE_SUB) {
+
+			instruction->signals.aluop = 3;
+
+			sprintf(instruction->string,"sub $%d, $%d, $%d",
+				instruction->fields.rd, instruction->fields.rs, 
+				instruction->fields.rt);
+			
+		} else if (func == FUNC_CODE_SGT) {
+
+			instruction->signals.aluop = 7;
+			sprintf(instruction->string,"sgt $%d, $%d, $%d",
+				instruction->fields.rd, instruction->fields.rs, 
+				instruction->fields.rt);
+		}
+
+	} else if (instruction->fields.op == OP_CODE_LW) {
+
+		instruction->signals.asrc = 1;
+		instruction->signals.aluop = 2;
+		instruction->signals.btype = 0;
+		instruction->signals.mw = 0;
+		instruction->signals.mr = 1;
+		instruction->signals.mtr = 1;
+		instruction->signals.rdst = 0;
+		instruction->signals.rw = 1;
+
+		sprintf(instruction->string,"lw $%d, %d($%d)",
+				instruction->fields.rt, instruction->fields.imm, 
+				instruction->fields.rs);
+
+		instruction->destreg = instruction->fields.rt;
+
+	} else if (instruction->fields.op == OP_CODE_SW) {
+
+		instruction->signals.asrc = 1;
+		instruction->signals.aluop = 2;
+		instruction->signals.btype = 0;
+		instruction->signals.mw = 1;
+		instruction->signals.mr = 0;
+		instruction->signals.rw = 0;
+
+		sprintf(instruction->string,"sw $%d, %d($%d)",
+				instruction->fields.rt, instruction->fields.imm, 
+				instruction->fields.rs);
+
+	} else if (instruction->fields.op == OP_CODE_BEQ) {
+
+		instruction->signals.aluop = 0b11;
+		instruction->signals.mw = 0;
+		instruction->signals.mr = 0;
+		instruction->signals.btype = 0b11;
+		instruction->signals.rw = 0;
+
+		sprintf(instruction->string,"beq %d",
+				instruction->fields.imm);
+
+	} else if (instruction->fields.op == OP_CODE_JR) {
+
+		instruction->signals.mw = 0;
+		instruction->signals.mr = 0;	
+		instruction->signals.btype = 0b10;
+		instruction->signals.rw = 0;
+
+		sprintf(instruction->string,"jr $%d",
+				instruction->fields.imm);
+
+	} else if (instruction->fields.op == OP_CODE_JAL) {
+
+		instruction->signals.mw = 0;
+		instruction->signals.mr = 0;
+		instruction->signals.btype = 0b01;
+		instruction->signals.mtr = 0b10;
+		instruction->signals.rw = 1;
+		instruction->signals.rdst = 0b01;
+
+		sprintf(instruction->string,"jal %d",
+				instruction->fields.imm);
+
 	}
 
-
-	// fill in s1data and input2
 }
 
 /* execute
