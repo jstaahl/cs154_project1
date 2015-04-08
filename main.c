@@ -17,7 +17,7 @@ int main(int argc, char *argv[])
 		exit(0);
 	}
 
-	maxpc = load(argv[1]);
+	maxpc = load(argv[1]) - 1;
 	printLoad(maxpc);
 
 	while (pc <= maxpc)

@@ -45,7 +45,7 @@ int load(char *filename)
 	instmem[line] = instruction;
     line++;
   }
-  pc = 1;
+  pc = 0;
   return line;
 }
 
