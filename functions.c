@@ -22,6 +22,12 @@
 #define FUNC_CODE_SUB 0b101000
 #define FUNC_CODE_SGT 0b110000
 
+#define ALU_AND 0b000
+#define ALU_ADD 0b010
+#define ALU_SUB 0b011
+#define ALU_SGT 0b111
+
+
 // these are the structures used in this simulator
 
 
@@ -236,6 +242,8 @@ void decode(InstInfo *instruction)
 
 	}
 
+	// Set inputs using register file, s1data, and s2data
+
 }
 
 /* execute
@@ -243,8 +251,19 @@ void decode(InstInfo *instruction)
  * This fills in the aluout value into the instruction and destdata
  */
 
-void execute(InstInfo *instruction)
-{
+void execute(InstInfo *instruction) {
+  
+  int aluop = instruction->signals.aluop;
+
+  if (aluop == ALU_AND) {
+    
+  } else if (aluop == ALU_ADD) {
+    
+  } else if (aluop == ALU_SUB) {
+
+  } else if (aluop == ALU_SGT) {
+
+  }
 
 }
 
