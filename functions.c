@@ -35,7 +35,7 @@
 // register file
 int regfile[32];
 // instruction memory
-int instmem[100];  // only support 100 static instructions
+int instmem[100];	// only support 100 static instructions
 // data memory
 int datamem[1024];
 // program counter
@@ -62,15 +62,15 @@ void writeback(InstInfo *);
  */
 int load(char *filename)
 {
-  FILE *f = fopen(filename, "r");
-  int instruction;
-  int line = 0;
-  while(fscanf(f, "%d[^\n]",&instruction) == 1) {
+	FILE *f = fopen(filename, "r");
+	int instruction;
+	int line = 0;
+	while(fscanf(f, "%d[^\n]",&instruction) == 1) {
 	instmem[line] = instruction;
-    line++;
-  }
-  pc = 0;
-  return line;
+	line++;
+	}
+	pc = 0;
+	return line;
 }
 
 /* fetch
@@ -80,17 +80,17 @@ int load(char *filename)
  */
 void fetch(InstInfo *instruction)
 {
-  instruction->inst = instmem[pc];
-  pc++;
+	instruction->inst = instmem[pc];
+	pc++;
 }
 
 /* decode
  *
- * This decodes an instruction.  It looks at the inst field of the 
- * instruction.  Then it decodes the fields into the field's data 
- * members.  The first one is given to you.
+ * This decodes an instruction.	It looks at the inst field of the 
+ * instruction.	Then it decodes the fields into the field's data 
+ * members.	The first one is given to you.
  *
- * Then it checks the op code.  Depending on what the opcode is, it
+ * Then it checks the op code.	Depending on what the opcode is, it
  * fills in all of the signals for that instruction.
  */
 void decode(InstInfo *instruction)
@@ -131,6 +131,13 @@ void decode(InstInfo *instruction)
 
 		instruction->destreg = instruction->fields.rt;
 
+		instruction->s1data = instruction->fields.rs;
+		instruction->s2data = instruction->fields.imm;
+
+		instruction->input1 = instruction->fields.imm;
+		instruction->s2data = instruction->fields.rs;
+		instruction->input2 = regfile[instruction->s2data];
+
 	} else if (instruction->fields.op == OP_CODE_ADD) {
 
 		instruction->signals.mw = 0;
@@ -142,8 +149,6 @@ void decode(InstInfo *instruction)
 		instruction->signals.rw = 1;
 
 		instruction->destreg = instruction->fields.rd;
-		instruction->s1data = instruction->fields.rs;
-		instruction->s2data = instruction->fields.rt;
 
 		if (func == FUNC_CODE_ADD) {
 
@@ -177,6 +182,12 @@ void decode(InstInfo *instruction)
 				instruction->fields.rt);
 		}
 
+		instruction->s1data = instruction->fields.rs;
+		instruction->s2data = instruction->fields.rt;
+
+		instruction->input1 = regfile[instruction->s1data];
+		instruction->input2 = regfile[instruction->s2data];
+
 	} else if (instruction->fields.op == OP_CODE_LW) {
 
 		instruction->signals.asrc = 1;
@@ -187,6 +198,11 @@ void decode(InstInfo *instruction)
 		instruction->signals.mtr = 1;
 		instruction->signals.rdst = 0;
 		instruction->signals.rw = 1;
+
+		instruction->input1 = instruction->fields.imm;
+		instruction->s2data = instruction->fields.rs;
+		instruction->input2 = regfile[instruction->s2data];
+
 
 		sprintf(instruction->string,"lw $%d, %d($%d)",
 				instruction->fields.rt, instruction->fields.imm, 
@@ -203,6 +219,10 @@ void decode(InstInfo *instruction)
 		instruction->signals.mr = 0;
 		instruction->signals.rw = 0;
 
+		instruction->input1 = instruction->fields.imm;
+		instruction->s2data = instruction->fields.rs;
+		instruction->input2 = regfile[instruction->s2data];
+
 		sprintf(instruction->string,"sw $%d, %d($%d)",
 				instruction->fields.rt, instruction->fields.imm, 
 				instruction->fields.rs);
@@ -214,6 +234,12 @@ void decode(InstInfo *instruction)
 		instruction->signals.mr = 0;
 		instruction->signals.btype = 0b11;
 		instruction->signals.rw = 0;
+
+		instruction->s1data = instruction->fields.rs;
+		instruction->s2data = instruction->fields.rt;
+
+		instruction->input1 = regfile[instruction->s1data];
+		instruction->input2 = regfile[instruction->s2data];		
 
 		sprintf(instruction->string,"beq %d",
 				instruction->fields.imm);
@@ -243,7 +269,6 @@ void decode(InstInfo *instruction)
 	}
 
 	// Set inputs using register file, s1data, and s2data
-
 }
 
 /* execute
@@ -252,18 +277,21 @@ void decode(InstInfo *instruction)
  */
 
 void execute(InstInfo *instruction) {
-  
-  int aluop = instruction->signals.aluop;
+	
+	int aluop = instruction->signals.aluop;
 
-  if (aluop == ALU_AND) {
-    
-  } else if (aluop == ALU_ADD) {
-    
-  } else if (aluop == ALU_SUB) {
+	int in1 = instruction->input1;
+	int in2 = instruction->input2;
 
-  } else if (aluop == ALU_SGT) {
-
-  }
+	if (aluop == ALU_AND) {
+		instruction->aluout = in1 & in2;
+	} else if (aluop == ALU_ADD) {
+		instruction->aluout = in1 + in2;
+	} else if (aluop == ALU_SUB) {
+		instruction->aluout = in1 - in2;
+	} else if (aluop == ALU_SGT) {
+		instruction->aluout = (in1 > in2);
+	}
 
 }
 
@@ -282,6 +310,7 @@ void memory(InstInfo *instruction)
  */
 void writeback(InstInfo *instruction)
 {
+	//
 }
 
 /* setPCWithInfo
