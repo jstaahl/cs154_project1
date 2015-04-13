@@ -81,6 +81,7 @@ int load(char *filename)
 void fetch(InstInfo *instruction)
 {
 	instruction->inst = instmem[pc];
+	instruction->pc = pc;
 	pc++;
 }
 
@@ -131,12 +132,9 @@ void decode(InstInfo *instruction)
 
 		instruction->destreg = instruction->fields.rt;
 
-		instruction->s1data = instruction->fields.rs;
-		instruction->s2data = instruction->fields.imm;
-
 		instruction->input1 = instruction->fields.imm;
-		instruction->s2data = instruction->fields.rs;
-		instruction->input2 = regfile[instruction->s2data];
+		instruction->s2data = regfile[instruction->fields.rs];
+		instruction->input2 = instruction->s2data;
 
 	} else if (instruction->fields.op == OP_CODE_ADD) {
 
@@ -182,11 +180,11 @@ void decode(InstInfo *instruction)
 				instruction->fields.rt);
 		}
 
-		instruction->s1data = instruction->fields.rs;
-		instruction->s2data = instruction->fields.rt;
+		instruction->s1data = regfile[instruction->fields.rs];
+		instruction->s2data = regfile[instruction->fields.rt];
 
-		instruction->input1 = regfile[instruction->s1data];
-		instruction->input2 = regfile[instruction->s2data];
+		instruction->input1 = instruction->s1data;
+		instruction->input2 = instruction->s2data;
 
 	} else if (instruction->fields.op == OP_CODE_LW) {
 
@@ -200,8 +198,8 @@ void decode(InstInfo *instruction)
 		instruction->signals.rw = 1;
 
 		instruction->input1 = instruction->fields.imm;
-		instruction->s2data = instruction->fields.rs;
-		instruction->input2 = regfile[instruction->s2data];
+		instruction->s2data = regfile[instruction->fields.rs];
+		instruction->input2 = instruction->s2data;
 
 
 		sprintf(instruction->string,"lw $%d, %d($%d)",
@@ -220,8 +218,10 @@ void decode(InstInfo *instruction)
 		instruction->signals.rw = 0;
 
 		instruction->input1 = instruction->fields.imm;
-		instruction->s2data = instruction->fields.rs;
-		instruction->input2 = regfile[instruction->s2data];
+		instruction->s2data = regfile[instruction->fields.rs];
+		instruction->input2 = instruction->s2data;
+
+		instruction->destdata = regfile[instruction->fields.rt];
 
 		sprintf(instruction->string,"sw $%d, %d($%d)",
 				instruction->fields.rt, instruction->fields.imm, 
@@ -234,14 +234,16 @@ void decode(InstInfo *instruction)
 		instruction->signals.mr = 0;
 		instruction->signals.btype = 0b11;
 		instruction->signals.rw = 0;
+		instruction->signals.asrc = 0;
 
-		instruction->s1data = instruction->fields.rs;
-		instruction->s2data = instruction->fields.rt;
+		instruction->s1data = regfile[instruction->fields.rs];
+		instruction->s2data = regfile[instruction->fields.rt];
 
-		instruction->input1 = regfile[instruction->s1data];
-		instruction->input2 = regfile[instruction->s2data];		
+		instruction->input1 = instruction->s1data;
+		instruction->input2 = instruction->s2data;		
 
-		sprintf(instruction->string,"beq %d",
+		sprintf(instruction->string,"beq $%d, $%d, %d",
+				instruction->fields.rs, instruction->fields.rt,
 				instruction->fields.imm);
 
 	} else if (instruction->fields.op == OP_CODE_JR) {
@@ -250,9 +252,12 @@ void decode(InstInfo *instruction)
 		instruction->signals.mr = 0;	
 		instruction->signals.btype = 0b10;
 		instruction->signals.rw = 0;
+		instruction->signals.aluop = -1;
+
+		instruction->s2data = regfile[instruction->fields.rs];
 
 		sprintf(instruction->string,"jr $%d",
-				instruction->fields.imm);
+				instruction->fields.rs);
 
 	} else if (instruction->fields.op == OP_CODE_JAL) {
 
@@ -261,14 +266,19 @@ void decode(InstInfo *instruction)
 		instruction->signals.btype = 0b01;
 		instruction->signals.mtr = 0b10;
 		instruction->signals.rw = 1;
-		instruction->signals.rdst = 0b01;
+		instruction->signals.rdst = 0b10;
+
+		instruction->signals.aluop = -1;
+
+		instruction->fields.imm = 0x03FFFFFF & instruction->inst;
+
+		instruction->destdata = instruction->pc + 1;
+		instruction->destreg = 31;
 
 		sprintf(instruction->string,"jal %d",
 				instruction->fields.imm);
 
 	}
-
-	// Set inputs using register file, s1data, and s2data
 }
 
 /* execute
@@ -299,24 +309,69 @@ void execute(InstInfo *instruction) {
  *
  * If this is a load or a store, perform the memory operation
  */
-void memory(InstInfo *instruction)
-{
-
+void memory(InstInfo *instruction) {
+	
+	if (instruction->signals.mr) {
+		// lw
+		instruction->memout = datamem[instruction->aluout];	
+	} else if (instruction->signals.mw) {
+		// sw
+		datamem[instruction->aluout] = instruction->input2;	
+	}
 }
 
 /* writeback
  *
  * If a register file is supposed to be written, write to it now
  */
-void writeback(InstInfo *instruction)
-{
-	//
+void writeback(InstInfo *instruction) {
+
+	// lw - instruction->memout to register
+	if (instruction->signals.rw) {
+		switch (instruction->signals.mtr) {
+
+			case 0b00:
+				// choose ALU output
+				regfile[instruction->destreg] = instruction->aluout;
+				break;
+			case 0b01:
+				// choose memory output
+				regfile[instruction->destreg] = instruction->memout;
+				break;
+			case 0b10:
+				// 10 choose PC+4
+				regfile[instruction->destreg] = instruction->destdata;
+				break;
+		}
+	}
 }
 
 /* setPCWithInfo
  *
  * branch instruction will overwrite PC
 */
-void setPCWithInfo( InstInfo *instruction)
-{
+void setPCWithInfo( InstInfo *instruction) {
+
+	// BType - 00 if not a branch, 11 if conditional jump, 01 if jump to an address encoded in instruction 
+	//(concatenated w/ top 4 bits of PC), 10 if jump to a register-specified location 
+
+	switch (instruction->signals.btype) {
+
+			case 0b01:
+				// jump to an address encoded in instruction
+				pc = instruction->fields.imm;
+				break;
+			case 0b10:
+				// if jump to a register-specified location
+				pc = instruction->s2data;
+				break;
+			case 0b11:
+				// conditional jump
+				if (!instruction->aluout) {
+					pc = instruction->fields.imm;
+				}
+				break;
+
+	}
+
 }
