@@ -316,7 +316,7 @@ void memory(InstInfo *instruction) {
 		instruction->memout = datamem[instruction->aluout];	
 	} else if (instruction->signals.mw) {
 		// sw
-		datamem[instruction->aluout] = instruction->input2;	
+		datamem[instruction->aluout] = instruction->destdata;	
 	}
 }
 
