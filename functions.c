@@ -61,16 +61,16 @@ void writeback(InstInfo *);
  * in the file
  */
 int load(char *filename)
-{
-	FILE *f = fopen(filename, "r");
-	int instruction;
-	int line = 0;
-	while(fscanf(f, "%d[^\n]",&instruction) == 1) {
-	instmem[line] = instruction;
-	line++;
-	}
-	pc = 0;
-	return line;
+{ 
+  FILE *f = fopen(filename, "r");
+  int instruction;
+  int line = 0;
+  while(fscanf(f, "%d[^\n]",&instruction) == 1) {
+    instmem[line] = instruction;
+    line++;
+  }
+  pc = 0;
+  return line;
 }
 
 /* fetch
@@ -80,9 +80,9 @@ int load(char *filename)
  */
 void fetch(InstInfo *instruction)
 {
-	instruction->inst = instmem[pc];
-	instruction->pc = pc;
-	pc++;
+  instruction->inst = instmem[pc];
+  instruction->pc = pc;
+  pc++;
 }
 
 /* decode
@@ -96,8 +96,9 @@ void fetch(InstInfo *instruction)
  */
 void decode(InstInfo *instruction)
 {
+  if (instruction->inst == 0) return;
 
-	// fill in the signals and fields
+  // fill in the signals and fields
 	int val = instruction->inst;
 	instruction->fields.op = (val >> 26) & 0x03f;
 	// fill in the rest of the fields here
@@ -287,6 +288,8 @@ void decode(InstInfo *instruction)
  */
 
 void execute(InstInfo *instruction) {
+
+    if (instruction->inst == 0) return;
 	
 	int aluop = instruction->signals.aluop;
 
@@ -310,6 +313,8 @@ void execute(InstInfo *instruction) {
  * If this is a load or a store, perform the memory operation
  */
 void memory(InstInfo *instruction) {
+
+    if (instruction->inst == 0) return;
 	
 	if (instruction->signals.mr) {
 		// lw
@@ -325,6 +330,8 @@ void memory(InstInfo *instruction) {
  * If a register file is supposed to be written, write to it now
  */
 void writeback(InstInfo *instruction) {
+
+    if (instruction->inst == 0) return;
 
 	// lw - instruction->memout to register
 	if (instruction->signals.rw) {
@@ -344,6 +351,8 @@ void writeback(InstInfo *instruction) {
 				break;
 		}
 	}
+
+	
 }
 
 /* setPCWithInfo
@@ -352,9 +361,10 @@ void writeback(InstInfo *instruction) {
 */
 void setPCWithInfo( InstInfo *instruction) {
 
+  if (instruction->inst == 0) return;
+
 	// BType - 00 if not a branch, 11 if conditional jump, 01 if jump to an address encoded in instruction 
 	//(concatenated w/ top 4 bits of PC), 10 if jump to a register-specified location 
-
 	switch (instruction->signals.btype) {
 
 			case 0b01:

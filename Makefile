@@ -1,7 +1,7 @@
-all: project1
+all: project2
 
-project1: functions.c main.c
-	gcc -o project1 functions.c main.c
+project2: functions.c main.c printP2.c
+	gcc -o project2 functions.c main.c printP2.c
 
 clean:
-	rm -f project1
+	rm -f project2

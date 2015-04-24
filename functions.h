@@ -1,4 +1,3 @@
-
 #ifndef FUNCTIONS_H
 #define FUNCTIONS_H
 
@@ -59,6 +58,7 @@ extern int pc;
 extern int instmem[100];
 extern int datamem[1024];
 extern int regfile[32];
+extern void printP2(InstInfo *fetchInst, InstInfo *decodeInst, InstInfo *executeInst, InstInfo *memoryInst, InstInfo *writebackInst, int cycle);
 
 #endif
 

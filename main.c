@@ -1,38 +1,79 @@
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <strings.h>
 #include "functions.h"
 
+
+typedef struct _pipenode PipeNode;
+
+struct _pipenode {
+  InstInfo instInfo;
+  PipeNode *next;
+};
+
+
+// helpers
+PipeNode* pipeNodes(int);
+void printP2helper(PipeNode*, int);
+
 int main(int argc, char *argv[])
 {
-	InstInfo curInst;
-	InstInfo *instPtr = &curInst;
-	int instnum = 0;
-	int maxpc;
-	FILE *program;
-	if (argc != 2)
-	{
-		printf("Usage: sim filename\n");
+  
+  InstInfo curInst;
+  InstInfo *instPtr = &curInst;
+  int instnum = 0;
+  int maxpc;
+  FILE *program;
+  if (argc != 2)
+    {
+      printf("Usage: sim filename\n");
 		exit(0);
-	}
+    }
 
-	maxpc = load(argv[1]) - 1;
-	printLoad(maxpc);
+  maxpc = load(argv[1]) - 1;
+  //printLoad(maxpc);
+  
+  PipeNode *head = pipeNodes(5);
+  PipeNode *current = head;
+  
+  do {
 
-	while (pc <= maxpc)
-	{
-		fetch(instPtr);
-		decode(instPtr);
-		execute(instPtr);
-		memory(instPtr);
-		writeback(instPtr);
-		print(instPtr,instnum++);
-	}
-	exit(0);
+    current->instInfo.inst = 0;
+    memset(current->instInfo.string, 0, sizeof(current->instInfo.string));
+
+      fetch(&(current->instInfo));
+      decode(&(current->instInfo));
+      current = current->next;
+
+      decode(&(current->instInfo));
+      current = current->next;
+
+      execute(&(current->instInfo));
+      current = current->next;
+
+      memory(&(current->instInfo));
+      current = current->next;
+
+      writeback(&(current->instInfo));
+
+      printP2helper(current->next,instnum++);
+  } while (current->instInfo.pc < maxpc);
+
+  exit(0);
+
 }
 
-/* print
+void printP2helper(PipeNode* head, int cycle) {
+  InstInfo *fetchInst = &(head->instInfo);
+  InstInfo *decodeInst = &((head = head->next)->instInfo);
+  InstInfo *executeInst = &((head = head->next)->instInfo);
+  InstInfo *memoryInst = &((head = head->next)->instInfo);
+  InstInfo *writebackInst = &((head = head->next)->instInfo);
+
+  printP2(fetchInst, decodeInst, executeInst, memoryInst, writebackInst, cycle);
+
+}
+/* Print
  *
  * prints out the state of the simulator after each instruction
  */
@@ -68,4 +109,24 @@ void printLoad(int max)
 	int i;
 	for(i=0;i<max;i++)
 		printf("%d\n",instmem[i]);
+}
+
+PipeNode* pipeNodes(int numNodes) {
+   PipeNode *first;
+  first = (PipeNode *)malloc(sizeof(PipeNode));
+  first->instInfo.inst = 0;
+  first->next = first;
+  PipeNode *cur = first;
+  int i;
+  for (i = 0; i < numNodes-1; i++) {
+    PipeNode *start = cur->next;
+    PipeNode *new = (PipeNode *)malloc(sizeof(PipeNode));
+    new->instInfo.inst = 0;
+    cur->next = new;
+    new->next = start;
+    cur = cur->next;
+  }
+
+  return first;
+
 }
