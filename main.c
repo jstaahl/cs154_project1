@@ -39,6 +39,7 @@ int main(int argc, char *argv[])
   do {
 
     current->instInfo.inst = 0;
+    current->instInfo.pc = -1;
     memset(current->instInfo.string, 0, sizeof(current->instInfo.string));
 
       fetch(&(current->instInfo));
@@ -125,6 +126,7 @@ PipeNode* pipeNodes(int numNodes) {
     PipeNode *start = cur->next;
     PipeNode *new = (PipeNode *)malloc(sizeof(PipeNode));
     new->instInfo.inst = 0;
+    new->instInfo.pc = -1;
     cur->next = new;
     new->next = start;
     cur = cur->next;
