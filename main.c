@@ -35,7 +35,7 @@ int main(int argc, char *argv[])
   
   PipeNode *head = pipeNodes(5);
   PipeNode *current = head;
-  
+
   do {
 
     current->instInfo.inst = 0;
@@ -58,6 +58,9 @@ int main(int argc, char *argv[])
 
       printP2helper(current->next,instnum++);
   } while (current->instInfo.pc < maxpc);
+
+  printf("Cycles: %d\n", instnum);
+  printf("Instructions Executed: %d\n", maxpc+1);
 
   exit(0);
 
