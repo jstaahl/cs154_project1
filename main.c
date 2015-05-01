@@ -47,6 +47,29 @@ int main(int argc, char *argv[])
       current = current->next;
 
       decode(&(current->instInfo));
+      
+      if (current->signals.rw) {
+        InstInfo *info = current->instInfo;
+
+        InstInfo *infoNext = current->next->instInfo;
+        if (infoNext->destreg == 0b00) {
+          // write to rt
+          // addi, lw
+          if (info->fields.rs == infoNext->fields.rt)
+            info->input2 = infoNext->aluout;
+
+        } else if (info->destreg == 0b01) {
+          // write to rd
+          // add, or, sub
+          if (info->fields.rs == infoNext->fields.rd)
+            info->input1 = infoNext->aluout;
+          if (info->fields.rt == infoNext->fields.rd)
+            info->input2 = infoNext->aluout;
+        }
+
+        
+      }
+
       current = current->next;
 
       execute(&(current->instInfo));
