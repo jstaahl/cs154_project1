@@ -132,9 +132,9 @@ void decode(InstInfo *instruction)
 
 		instruction->destreg = 0b00;
 
-		instruction->input1 = instruction->fields.imm;
+		instruction->input2 = instruction->fields.imm;
 		instruction->s2data = regfile[instruction->fields.rs];
-		instruction->input2 = instruction->s2data;
+		instruction->input1 = instruction->s2data;
 
 	} else if (instruction->fields.op == OP_CODE_ADD) {
 

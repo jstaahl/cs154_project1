@@ -100,7 +100,7 @@ void wireDataForwarding(PipeNode *current, int instnum) {
 				if ((info->fields.rs == infoNext->fields.rt && infoNext->destreg == 0b00) ||
 				 (info->fields.rs == infoNext->fields.rd && infoNext->destreg == 0b01) ){
 					info->input1 = infoNext->aluout;
-					//printf("**************I format: info->input2 = infoNext->aluout;");
+
 				}
 				
 			} else if (info->destreg == 0b01) {
