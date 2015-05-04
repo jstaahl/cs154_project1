@@ -36,53 +36,70 @@ int main(int argc, char *argv[])
   PipeNode *head = pipeNodes(5);
   PipeNode *current = head;
 
+  int stallF = 0;
+  int stallD = 0;
+  int stallX = 0;
+  int stallM = 0;
+  int stallW = 0;
+
   do {
 
     current->instInfo.inst = 0;
     current->instInfo.pc = -1;
     memset(current->instInfo.string, 0, sizeof(current->instInfo.string));
 
+    //if (stallF == 0) {
       fetch(&(current->instInfo));
       decode(&(current->instInfo));
       current = current->next;
-
-      decode(&(current->instInfo));
+      //}
+    
+    decode(&(current->instInfo));
       
-      if (current->signals.rw) {
-        InstInfo *info = current->instInfo;
-
-        InstInfo *infoNext = current->next->instInfo;
-        if (infoNext->destreg == 0b00) {
+    if (current->instInfo.signals.rw && instnum > 1) {
+      InstInfo *info = &(current->instInfo);
+      InstInfo *infoNext = &(current->next->instInfo);
+      
+      if (infoNext->destreg == 0b00) {
           // write to rt
           // addi, lw
-          if (info->fields.rs == infoNext->fields.rt)
-            info->input2 = infoNext->aluout;
+	if (info->fields.rs == infoNext->fields.rt) {
+	  info->input2 = infoNext->aluout;
+	  printf("**************I format: info->input2 = infoNext->aluout;");
+	}
+	
+      } else if (info->destreg == 0b01) {
+	// write to rd
+	// add, or, sub
 
-        } else if (info->destreg == 0b01) {
-          // write to rd
-          // add, or, sub
-          if (info->fields.rs == infoNext->fields.rd)
-            info->input1 = infoNext->aluout;
-          if (info->fields.rt == infoNext->fields.rd)
-            info->input2 = infoNext->aluout;
-        }
-
-        
+	if (info->fields.rs == infoNext->fields.rd) {
+	  info->input1 = infoNext->aluout;
+	  printf("**************R format: info->input1 = infoNext->aluout;");
+	}
+	if (info->fields.rt == infoNext->fields.rd) {
+	  info->input2 = infoNext->aluout;
+	  printf("**************R Format: info->input2 = infoNext->aluout;");
+	}
       }
+      
+    }
 
-      current = current->next;
+    current = current->next;
+      
+    execute(&(current->instInfo));
+    current = current->next;
+    
+    memory(&(current->instInfo));
+    current = current->next;
+      
+    writeback(&(current->instInfo));
 
-      execute(&(current->instInfo));
-      current = current->next;
-
-      memory(&(current->instInfo));
-      current = current->next;
-
-      writeback(&(current->instInfo));
-
-      printP2helper(current->next,instnum++);
+    //if (current->instInfo.signals.mtr == 0b01)
+      
+    printP2helper(current->next,instnum++);
+  
   } while (current->instInfo.pc < maxpc);
-
+  
   printf("Cycles: %d\n", instnum);
   printf("Instructions Executed: %d\n", maxpc+1);
 

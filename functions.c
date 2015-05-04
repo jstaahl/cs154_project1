@@ -130,7 +130,7 @@ void decode(InstInfo *instruction)
 				instruction->fields.rt, instruction->fields.rs, 
 				instruction->fields.imm);
 
-		instruction->destreg = instruction->fields.rt;
+		instruction->destreg = 0b00;
 
 		instruction->input1 = instruction->fields.imm;
 		instruction->s2data = regfile[instruction->fields.rs];
@@ -146,7 +146,7 @@ void decode(InstInfo *instruction)
 		instruction->signals.rdst = 1;
 		instruction->signals.rw = 1;
 
-		instruction->destreg = instruction->fields.rd;
+		instruction->destreg = 0b01;
 
 		if (func == FUNC_CODE_ADD) {
 
@@ -206,7 +206,7 @@ void decode(InstInfo *instruction)
 				instruction->fields.rt, instruction->fields.imm, 
 				instruction->fields.rs);
 
-		instruction->destreg = instruction->fields.rt;
+		instruction->destreg = 0b00;
 
 	} else if (instruction->fields.op == OP_CODE_SW) {
 
@@ -273,7 +273,7 @@ void decode(InstInfo *instruction)
 		instruction->fields.imm = 0x03FFFFFF & instruction->inst;
 
 		instruction->destdata = instruction->pc + 1;
-		instruction->destreg = 31;
+		instruction->destreg = 0b10;;
 
 		sprintf(instruction->string,"jal %d",
 				instruction->fields.imm);
@@ -334,19 +334,31 @@ void writeback(InstInfo *instruction) {
 
 	// lw - instruction->memout to register
 	if (instruction->signals.rw) {
+	  int destreg;
+	  switch (instruction->destreg) {
+	  case 0b00:
+	    destreg = instruction->fields.rt;
+	    break;
+	  case 0b01:
+	    destreg = instruction->fields.rd;
+	    break;
+	  case 0b10:
+	    destreg = 31;
+	    break;
+	  }
 		switch (instruction->signals.mtr) {
 
 			case 0b00:
 				// choose ALU output
-				regfile[instruction->destreg] = instruction->aluout;
+				regfile[destreg] = instruction->aluout;
 				break;
 			case 0b01:
 				// choose memory output
-				regfile[instruction->destreg] = instruction->memout;
+				regfile[destreg] = instruction->memout;
 				break;
 			case 0b10:
 				// 10 choose PC+4
-				regfile[instruction->destreg] = instruction->destdata;
+				regfile[destreg] = instruction->destdata;
 				break;
 		}
 	}
