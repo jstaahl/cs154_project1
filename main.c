@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <strings.h>
 #include "functions.h"
 
@@ -7,114 +8,141 @@
 typedef struct _pipenode PipeNode;
 
 struct _pipenode {
-  InstInfo instInfo;
-  PipeNode *next;
+	InstInfo instInfo;
+	PipeNode *next;
 };
 
 
 // helpers
 PipeNode* pipeNodes(int);
+void wireDataForwarding(PipeNode *current, int instnum);
 void printP2helper(PipeNode*, int);
 
 int main(int argc, char *argv[])
 {
-  
-  InstInfo curInst;
-  InstInfo *instPtr = &curInst;
-  int instnum = 0;
-  int maxpc;
-  FILE *program;
-  if (argc != 2)
-    {
-      printf("Usage: sim filename\n");
-		exit(0);
-    }
-
-  maxpc = load(argv[1]) - 1;
-  //printLoad(maxpc);
-  
-  PipeNode *head = pipeNodes(5);
-  PipeNode *current = head;
-
-  int stallF = 0;
-  int stallD = 0;
-  int stallX = 0;
-  int stallM = 0;
-  int stallW = 0;
-
-  do {
-
-    current->instInfo.inst = 0;
-    current->instInfo.pc = -1;
-    memset(current->instInfo.string, 0, sizeof(current->instInfo.string));
-
-    //if (stallF == 0) {
-      fetch(&(current->instInfo));
-      decode(&(current->instInfo));
-      current = current->next;
-      //}
-    
-    decode(&(current->instInfo));
-      
-    if (current->instInfo.signals.rw && instnum > 1) {
-      InstInfo *info = &(current->instInfo);
-      InstInfo *infoNext = &(current->next->instInfo);
-      
-      if (infoNext->destreg == 0b00) {
-          // write to rt
-          // addi, lw
-	if (info->fields.rs == infoNext->fields.rt) {
-	  info->input2 = infoNext->aluout;
-	  printf("**************I format: info->input2 = infoNext->aluout;");
-	}
 	
-      } else if (info->destreg == 0b01) {
-	// write to rd
-	// add, or, sub
+	InstInfo curInst;
+	InstInfo *instPtr = &curInst;
+	int instnum = 0;
+	int maxpc;
+	FILE *program;
+	if (argc != 2)
+		{
+			printf("Usage: sim filename\n");
+		exit(0);
+		}
 
-	if (info->fields.rs == infoNext->fields.rd) {
-	  info->input1 = infoNext->aluout;
-	  printf("**************R format: info->input1 = infoNext->aluout;");
-	}
-	if (info->fields.rt == infoNext->fields.rd) {
-	  info->input2 = infoNext->aluout;
-	  printf("**************R Format: info->input2 = infoNext->aluout;");
-	}
-      }
-      
-    }
+	maxpc = load(argv[1]) - 1;
+	//printLoad(maxpc);
+	
+	PipeNode *head = pipeNodes(5);
+	PipeNode *current = head;
 
-    current = current->next;
-      
-    execute(&(current->instInfo));
-    current = current->next;
-    
-    memory(&(current->instInfo));
-    current = current->next;
-      
-    writeback(&(current->instInfo));
+	int stallF = 0;
+	int stallD = 0;
+	int stallX = 0;
+	int stallM = 0;
+	int stallW = 0;
 
-    //if (current->instInfo.signals.mtr == 0b01)
-      
-    printP2helper(current->next,instnum++);
-  
-  } while (current->instInfo.pc < maxpc);
-  
-  printf("Cycles: %d\n", instnum);
-  printf("Instructions Executed: %d\n", maxpc+1);
+	do {
 
-  exit(0);
+		current->instInfo.inst = 0;
+		current->instInfo.pc = -1;
+		memset(current->instInfo.string, 0, sizeof(current->instInfo.string));
+
+		//if (stallF == 0) {
+			fetch(&(current->instInfo));
+			decode(&(current->instInfo));
+			current = current->next;
+			//}
+		
+		decode(&(current->instInfo));
+
+		current = current->next;
+			
+		execute(&(current->instInfo));
+		current = current->next;
+		
+		memory(&(current->instInfo));
+		current = current->next;
+			
+		writeback(&(current->instInfo));
+
+		wireDataForwarding(current, instnum);
+
+		//if (current->instInfo.signals.mtr == 0b01)
+			
+		printP2helper(current->next,instnum++);
+	
+	} while (current->instInfo.pc < maxpc);
+	
+	printf("Cycles: %d\n", instnum);
+	printf("Instructions Executed: %d\n", maxpc+1);
+
+	exit(0);
 
 }
 
-void printP2helper(PipeNode* head, int cycle) {
-  InstInfo *fetchInst = &(head->instInfo);
-  InstInfo *decodeInst = &((head = head->next)->instInfo);
-  InstInfo *executeInst = &((head = head->next)->instInfo);
-  InstInfo *memoryInst = &((head = head->next)->instInfo);
-  InstInfo *writebackInst = &((head = head->next)->instInfo);
+void wireDataForwarding(PipeNode *current, int instnum) {
+	PipeNode *threeBack = current->next->next;
+	InstInfo *info = &(threeBack->instInfo);
+	InstInfo *infoNext;
+	
+	int i;
+	for (i = 0; i < 3; i++) {
+		infoNext = &(threeBack->next->instInfo);
+		if (info->signals.rw && instnum > 1 + i) {		
+			if (info->destreg == 0b00) {
+				// write to rt
+				// addi, lw
+				
+				// info is also immidate format
+				if ((info->fields.rs == infoNext->fields.rt && infoNext->destreg == 0b00) ||
+				 (info->fields.rs == infoNext->fields.rd && infoNext->destreg == 0b01) ){
+					info->input1 = infoNext->aluout;
+					//printf("**************I format: info->input2 = infoNext->aluout;");
+				}
+				
+			} else if (info->destreg == 0b01) {
+				// write to rd
+				// add, or, sub
+				if (infoNext->destreg == 0b00) {
+					if (info->fields.rs == infoNext->fields.rt) {
+						info->input1 = infoNext->aluout;
+						//printf("**************R format: info->input1 = infoNext->aluout;");
+						//printf("  (%s) aluout: %d\n", infoNext->string, infoNext->aluout);
+					}
+					if (info->fields.rt == infoNext->fields.rt) {
+						info->input2 = infoNext->aluout;
+						//printf("**************R Format: info->input2 = infoNext->aluout;");
+					}
+				}
+				else if (infoNext->destreg == 0b01) {
+					if (info->fields.rs == infoNext->fields.rd) {
+						info->input1 = infoNext->aluout;
+						//printf("**************R format: info->input1 = infoNext->aluout;");
+						//printf("  (%s) aluout: %d\n", infoNext->string, infoNext->aluout);
+					}
+					if (info->fields.rt == infoNext->fields.rd) {
+						info->input2 = infoNext->aluout;
+						//printf("**************R Format: info->input2 = infoNext->aluout;");
+					}
+				}
+			}
+		}
 
-  printP2(fetchInst, decodeInst, executeInst, memoryInst, writebackInst, cycle);
+		threeBack = threeBack->next;
+	}
+}
+
+void printP2helper(PipeNode* head, int cycle) {
+	InstInfo *fetchInst = &(head->instInfo);
+	InstInfo *decodeInst = &((head = head->next)->instInfo);
+	InstInfo *executeInst = &((head = head->next)->instInfo);
+	InstInfo *memoryInst = &((head = head->next)->instInfo);
+	InstInfo *writebackInst = &((head = head->next)->instInfo);
+
+	printP2(fetchInst, decodeInst, executeInst, memoryInst, writebackInst, cycle);
 
 }
 /* Print
@@ -156,22 +184,22 @@ void printLoad(int max)
 }
 
 PipeNode* pipeNodes(int numNodes) {
-   PipeNode *first;
-  first = (PipeNode *)malloc(sizeof(PipeNode));
-  first->instInfo.inst = 0;
-  first->next = first;
-  PipeNode *cur = first;
-  int i;
-  for (i = 0; i < numNodes-1; i++) {
-    PipeNode *start = cur->next;
-    PipeNode *new = (PipeNode *)malloc(sizeof(PipeNode));
-    new->instInfo.inst = 0;
-    new->instInfo.pc = -1;
-    cur->next = new;
-    new->next = start;
-    cur = cur->next;
-  }
+	 PipeNode *first;
+	first = (PipeNode *)malloc(sizeof(PipeNode));
+	first->instInfo.inst = 0;
+	first->next = first;
+	PipeNode *cur = first;
+	int i;
+	for (i = 0; i < numNodes-1; i++) {
+		PipeNode *start = cur->next;
+		PipeNode *new = (PipeNode *)malloc(sizeof(PipeNode));
+		new->instInfo.inst = 0;
+		new->instInfo.pc = -1;
+		cur->next = new;
+		new->next = start;
+		cur = cur->next;
+	}
 
-  return first;
+	return first;
 
 }
