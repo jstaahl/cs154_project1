@@ -96,17 +96,16 @@ void wireDataForwarding(PipeNode *current, int instnum) {
 
 		// sw
 		if (info->signals.mw == 1) {
-			// infoNext is I format
+			// infoNext is I format, and it's not another sw (because sw should have a destreg of -1, b/c it doesn't write)
 			if (infoNext->destreg == 0b00) {
 				// if sw's rt = infoNext's rt
+			        // (sw reads fro rt, )
 				if (infoNext->fields.rt == info->fields.rt) {
 					info->destdata = infoNext->aluout;
 				}
 				// if sw's rs = infoNext's rt (sw reads two registers)
-				// (only if infoNext is not a sw operation, because it's not writing to rt in that case)
-				if (infoNext->fields.rs == info->fields.rt && info->signals.mw == 0) {
+				if (infoNext->fields.rs == info->fields.rt) {
 					info->input2 = infoNext->aluout;
-					printf("$$$$$$$$$$$$$3 set input2 = %d%s\n", info->input2);
 				}
 			// info is R format
 			} else if (infoNext->destreg == 0b01) {
@@ -132,18 +131,12 @@ void wireDataForwarding(PipeNode *current, int instnum) {
 					info->input1 = infoNext->aluout;
 				}
 
-				// info is reading from the memory location that infoNext wrote to
+				// infoNext is reading from the memory location that infoNextNext wrote to
 				// i.e. mem read after mem write
-				// i think this is off... info's execute hasn't happend yet...
+				// Must go one more forward because we have to compare the memory addresses that results from the alu op
+				// ... and that doesn't happen until the exectute stage
 				if (infoNextNext->aluout == infoNext->aluout && infoNextNext->signals.mw == 1 && infoNext->signals.mr == 1) {
 					infoNext->memout = infoNextNext->destdata;
-				}
-
-
-				if (infoNextNext->signals.mw == 1 && infoNext->signals.mr == 1) {
-					printf("*************HIT TEST*************\n");
-					printf("infoNextNext->aluout: %d\n", infoNextNext->aluout);
-					printf("infoNext->aluout: %d\n", infoNext->aluout);
 				}
 				
 			} else if (info->destreg == 0b01) {
@@ -157,7 +150,6 @@ void wireDataForwarding(PipeNode *current, int instnum) {
 					}
 					if (info->fields.rt == infoNext->fields.rt) {
 						info->input2 = infoNext->aluout;
-						printf("$$$$$$$$$$$$$1 set input2 = %d%s\n", info->input2);
 						//printf("**************R Format: info->input2 = infoNext->aluout;");
 					}
 				}
@@ -169,7 +161,6 @@ void wireDataForwarding(PipeNode *current, int instnum) {
 					}
 					if (info->fields.rt == infoNext->fields.rd) {
 						info->input2 = infoNext->aluout;
-						printf("$$$$$$$$$$$$$2 set input2 = %d%s\n", info->input2);
 						//printf("**************R Format: info->input2 = infoNext->aluout;");
 					}
 				}
