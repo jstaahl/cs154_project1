@@ -87,20 +87,54 @@ void wireDataForwarding(PipeNode *current, int instnum) {
 	PipeNode *threeBack = current->next->next;
 	InstInfo *info = &(threeBack->instInfo);
 	InstInfo *infoNext;
+	InstInfo *infoNextNext;
 	
 	int i;
 	for (i = 0; i < 3; i++) {
 		infoNext = &(threeBack->next->instInfo);
-		if (info->signals.rw && instnum > 1 + i) {		
+		infoNextNext = &(threeBack->next->next->instInfo);
+
+		// sw
+		if (info->signals.mw == 1) {
+			// infoNext is I format
+			if (infoNext->destreg == 0b00) {
+				// if sw's rt = infoNext's rt
+				if (infoNext->fields.rt == info->fields.rt) {
+					info->destdata = infoNext->aluout;
+				}
+				// if sw's rs = infoNext's rt (sw reads two registers)
+				if (infoNext->fields.rt == info->fields.rs) {
+					info->input2 = infoNext->aluout; 
+				}
+			// info is R format
+			} else if (infoNext->destreg == 0b01) {
+				// if sw's rt = infoNext's rd 
+				if (info->fields.rt == infoNext->fields.rd) {
+					info->destdata = infoNext->aluout;
+				}
+				// if sw's rs = infoNext's rd
+				if (info->fields.rs == infoNext->fields.rd) {
+					info->input1 = infoNext->aluout;
+				}
+			}
+		}
+
+		if (info->signals.rw && instnum > 1 + i) {
 			if (info->destreg == 0b00) {
 				// write to rt
 				// addi, lw
 				
-				// info is also immidate format
+				// info is reading from the reg that infoNext wrote to
 				if ((info->fields.rs == infoNext->fields.rt && infoNext->destreg == 0b00) ||
 				 (info->fields.rs == infoNext->fields.rd && infoNext->destreg == 0b01) ){
 					info->input1 = infoNext->aluout;
+				}
 
+				// info is reading from the memory location that infoNext wrote to
+				// i.e. mem read after mem write
+				// i think this is off... info's execute hasn't happend yet...
+				if (infoNextNext->aluout == infoNext->aluout && infoNextNext->signals.mw == 1 && infoNext->signals.mr == 1) {
+					infoNext->memout = infoNextNext->destdata;
 				}
 				
 			} else if (info->destreg == 0b01) {
