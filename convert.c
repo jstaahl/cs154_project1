@@ -4,7 +4,9 @@
 
 int encodeRFormat(int op, int func);
 int encodeIFormat(int op);
+int encodeBFormat(int op);
 int encodeJFormat(int op);
+int encodeWFormat(int op);
 int regToInt(char *reg);
 
 int main(int argc, char *argv[]) {
@@ -27,15 +29,15 @@ int main(int argc, char *argv[]) {
       } else if (!strcmp(token, "sgt")) {
 	printf("%d\n", encodeRFormat(0b100000, 0b110000));
       } else if (!strcmp(token, "lw")) {
-	printf("%d\n", encodeIFormat(0b010001));
+	printf("%d\n", encodeWFormat(0b010001));
       } else if (!strcmp(token, "sw")) {
-	printf("%d\n", encodeIFormat(0b010010));
+	printf("%d\n", encodeWFormat(0b010010));
       } else if (!strcmp(token, "beq")) {
-	printf("%d\n", encodeIFormat(0b001010));
+	printf("%d\n", encodeBFormat(0b001010));
       } else if (!strcmp(token, "jr")) {
 	printf("%d\n", encodeRFormat(0b100101, 0));
       } else if (!strcmp(token, "jal")) {
-
+	printf("%d\n", encodeJFormat(0b001000));
       }
     }
 }
@@ -72,18 +74,28 @@ int encodeIFormat(int op) {
   int instruction;
   rs = rt = imm = 0;
 
-  char *token = strtok(NULL, ", ");
-  rt = regToInt(token);
-  token = strtok(NULL, ", ");
-  rs = regToInt(token);
-  token = strtok(NULL, ", ");
-  imm = atoi(token);
-
-  /*
   rt = regToInt(strtok(NULL, ", "));
   rs = regToInt(strtok(NULL, ", "));
   imm = atoi(strtok(NULL, ", "));
-  */
+
+  //format and concatenate
+  instruction = op << 26;
+  instruction += (rs & 31) << 21;
+  instruction += (rt & 31) << 16;
+  instruction += (imm & 0xffff);
+
+  return instruction;
+}
+
+// for beq instruction
+int encodeBFormat(int op) {
+  int rs, rt, imm;
+  int instruction;
+  rs = rt = imm = 0;
+
+  rs = regToInt(strtok(NULL, ", "));
+  rt = regToInt(strtok(NULL, ", "));
+  imm = atoi(strtok(NULL, ", "));
 
   //format and concatenate
   instruction = op << 26;
@@ -104,7 +116,26 @@ int encodeJFormat(int op) {
   instruction = op << 26;
   instruction += (imm & 0x3ffffff);
   
-  return -1;
+  return instruction;
+}
+
+// for lw and sw instructions
+int encodeWFormat(int op) {
+  int rs, rt, imm;
+  int instruction;
+  rs = rt = imm = 0;
+
+  rt = regToInt(strtok(NULL, ", "));
+  imm = atoi(strtok(NULL, ", ("));
+  rs = regToInt(strtok(NULL, ")"));
+
+  //format and concatenate
+  instruction = op << 26;
+  instruction += (rs & 31) << 21;
+  instruction += (rt & 31) << 16;
+  instruction += (imm & 0xffff);
+
+  return instruction;
 }
 
 int regToInt(char *reg) {
