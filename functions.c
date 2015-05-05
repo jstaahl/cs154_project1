@@ -198,6 +198,7 @@ void decode(InstInfo *instruction)
 		instruction->signals.rw = 1;
 
 		instruction->input1 = instruction->fields.imm;
+		printf("*****************lw input 2 gets immediate: %d\n", instruction->fields.imm);
 		instruction->s2data = regfile[instruction->fields.rs];
 		instruction->input2 = instruction->s2data;
 
@@ -299,6 +300,7 @@ void execute(InstInfo *instruction) {
 		instruction->aluout = in1 & in2;
 	} else if (aluop == ALU_ADD) {
 		instruction->aluout = in1 + in2;
+		if (instruction->signals.mr == 1) printf("**********lw execute, aluout = %d, input2 = %d\n", instruction->aluout, instruction->input2);
 	} else if (aluop == ALU_SUB) {
 		instruction->aluout = in1 - in2;
 	} else if (aluop == ALU_SGT) {

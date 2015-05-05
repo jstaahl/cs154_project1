@@ -103,8 +103,10 @@ void wireDataForwarding(PipeNode *current, int instnum) {
 					info->destdata = infoNext->aluout;
 				}
 				// if sw's rs = infoNext's rt (sw reads two registers)
-				if (infoNext->fields.rt == info->fields.rs) {
-					info->input2 = infoNext->aluout; 
+				// (only if infoNext is not a sw operation, because it's not writing to rt in that case)
+				if (infoNext->fields.rs == info->fields.rt && info->signals.mw == 0) {
+					info->input2 = infoNext->aluout;
+					printf("$$$$$$$$$$$$$3 set input2 = %d%s\n", info->input2);
 				}
 			// info is R format
 			} else if (infoNext->destreg == 0b01) {
@@ -136,6 +138,13 @@ void wireDataForwarding(PipeNode *current, int instnum) {
 				if (infoNextNext->aluout == infoNext->aluout && infoNextNext->signals.mw == 1 && infoNext->signals.mr == 1) {
 					infoNext->memout = infoNextNext->destdata;
 				}
+
+
+				if (infoNextNext->signals.mw == 1 && infoNext->signals.mr == 1) {
+					printf("*************HIT TEST*************\n");
+					printf("infoNextNext->aluout: %d\n", infoNextNext->aluout);
+					printf("infoNext->aluout: %d\n", infoNext->aluout);
+				}
 				
 			} else if (info->destreg == 0b01) {
 				// write to rd
@@ -148,6 +157,7 @@ void wireDataForwarding(PipeNode *current, int instnum) {
 					}
 					if (info->fields.rt == infoNext->fields.rt) {
 						info->input2 = infoNext->aluout;
+						printf("$$$$$$$$$$$$$1 set input2 = %d%s\n", info->input2);
 						//printf("**************R Format: info->input2 = infoNext->aluout;");
 					}
 				}
@@ -159,6 +169,7 @@ void wireDataForwarding(PipeNode *current, int instnum) {
 					}
 					if (info->fields.rt == infoNext->fields.rd) {
 						info->input2 = infoNext->aluout;
+						printf("$$$$$$$$$$$$$2 set input2 = %d%s\n", info->input2);
 						//printf("**************R Format: info->input2 = infoNext->aluout;");
 					}
 				}
