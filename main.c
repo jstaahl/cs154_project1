@@ -16,7 +16,11 @@ struct _pipenode {
 // helpers
 PipeNode* pipeNodes(int);
 void wireDataForwarding(PipeNode *current, int instnum);
+PipeNode* insertDataHazStall(PipeNode **wb_node_ptr, int instnum);
+void insertControlHazStall(PipeNode *wb_node, int instnum);
 void printP2helper(PipeNode*, int);
+
+int instructionsExecuted;
 
 int main(int argc, char *argv[])
 {
@@ -37,25 +41,26 @@ int main(int argc, char *argv[])
 	
 	PipeNode *head = pipeNodes(5);
 	PipeNode *current = head;
+	PipeNode *last;
 
-	int stallF = 0;
-	int stallD = 0;
-	int stallX = 0;
-	int stallM = 0;
-	int stallW = 0;
+	instructionsExecuted = 0;
+	int stall = 0;
 
 	do {
 
-		current->instInfo.inst = 0;
-		current->instInfo.pc = -1;
-		memset(current->instInfo.string, 0, sizeof(current->instInfo.string));
+		if (!stall) {
+			current->instInfo.inst = 0;
+			current->instInfo.pc = -1;
+			memset(current->instInfo.string, 0, sizeof(current->instInfo.string));
 
-		//if (stallF == 0) {
 			fetch(&(current->instInfo));
-			decode(&(current->instInfo));
-			current = current->next;
-			//}
+		}
+		decode(&(current->instInfo));
 		
+		current = current->next;
+		
+		setPCWithInfo(&(current->instInfo));
+
 		decode(&(current->instInfo));
 
 		current = current->next;
@@ -68,106 +73,296 @@ int main(int argc, char *argv[])
 			
 		writeback(&(current->instInfo));
 
-		wireDataForwarding(current, instnum);
 
-		//if (current->instInfo.signals.mtr == 0b01)
-			
+
 		printP2helper(current->next,instnum++);
-	
-	} while (current->instInfo.pc < maxpc);
+
+		if (current->instInfo.inst != 0) {
+			instructionsExecuted++;
+		}
+
+
+
+		last = insertDataHazStall(&current, instnum);
+		if (last == current) { //no stall was inserted
+			wireDataForwarding(last, instnum);
+			insertControlHazStall(last, instnum);
+			stall = 0;
+		} else {
+			stall = 1;
+		}
+
+	} while (last->instInfo.pc < maxpc);
 	
 	printf("Cycles: %d\n", instnum);
-	printf("Instructions Executed: %d\n", maxpc+1);
+	printf("Instructions Executed: %d\n", instructionsExecuted);
 
 	exit(0);
 
 }
 
-void wireDataForwarding(PipeNode *current, int instnum) {
-	PipeNode *threeBack = current->next->next;
-	InstInfo *info = &(threeBack->instInfo);
-	InstInfo *infoNext;
-	InstInfo *infoNextNext;
+
+void makeNoOp(PipeNode *wb_node_ptr) {
+	PipeNode *if_node = wb_node_ptr->next;
+
+	if_node->instInfo.inst = 0;
+	if_node->instInfo.pc = -1;
+	memset(if_node->instInfo.string, 0, sizeof(if_node->instInfo.string));
+}
+
+void insertControlHazStall(PipeNode *wb_node, int instnum) {
+	PipeNode *id_node = wb_node->next->next;
+	InstInfo *id_instInfo = &(id_node->instInfo);
+
+	if (id_instInfo->fields.op == 0b100101 || id_instInfo->fields.op == 0b001000 ||
+			(id_instInfo->fields.op == 0b001010 && (id_instInfo->s1data - id_instInfo->s2data == 0) )) {
+		makeNoOp(wb_node);
+	}
+
+}
+
+PipeNode *insertStall(PipeNode **wb_node_ptr) {
+	PipeNode *wb_node = *wb_node_ptr;
+
+	wb_node->instInfo.inst = 0;
+	wb_node->instInfo.pc = -1;
+	memset(wb_node->instInfo.string, 0, sizeof(wb_node->instInfo.string));
+
+	PipeNode *id_node = wb_node->next->next;
+	PipeNode *mem_node = id_node->next->next;
+
+	mem_node->next = mem_node->next->next;	
+	wb_node->next = id_node->next;
+	id_node->next = wb_node;
+
+
+	*wb_node_ptr = mem_node->next;
+	return mem_node;
+}
+
+
+// update wb_node_ptr to the logical replacement for wb_node_ptr
+// return the last node in the list
+PipeNode *insertDataHazStall(PipeNode **wb_node_ptr, int instnum) {
+	PipeNode *wb_node = *wb_node_ptr;
+	PipeNode *id_node = wb_node->next->next;
+
+	PipeNode *next_node = id_node->next;
+	InstInfo *idni = &(next_node->instInfo);
+	InstInfo *idnni = &(next_node->next->instInfo);
+
+	PipeNode *ret = wb_node;
+	next_node = id_node->next;
+
+	if (id_node->instInfo.signals.btype == 0b11 && idnni->inst != 0) {
+		if (idnni->signals.mr == 1) {
+			ret = insertStall(wb_node_ptr);
+			return ret;
+		}
+	}
+
+	if (idni->inst == 0) {
+		return ret;
+	}
+
+	if (id_node->instInfo.signals.btype == 0b11) {
+		// id node is beq
+		if (idni->destreg == 0b00) {
+			if (id_node->instInfo.fields.rs == idni->fields.rt) {
+				ret = insertStall(wb_node_ptr);
+				return ret;
+			}
+
+			if (id_node->instInfo.fields.rt == idni->fields.rt) {
+				ret = insertStall(wb_node_ptr);
+				return ret;
+			}
+		} else if (idni->destreg == 0b01) {
+			if (id_node->instInfo.fields.rs == idni->fields.rd) {
+				ret = insertStall(wb_node_ptr);
+				return ret;
+			}
+
+			if (id_node->instInfo.fields.rt == idni->fields.rd) {
+				ret = insertStall(wb_node_ptr);
+				return ret;
+			}
+		}
+	}
+
+	if(id_node->instInfo.signals.mr == 1) {
+			// idnode is lw
+
+		if (idni->signals.mr == 1 && id_node->instInfo.fields.rs == idni->fields.rt) {
+			// two lw's
+			ret = insertStall(wb_node_ptr);
+			return ret;
+		}
+
+	}	else if (id_node->instInfo.signals.mw == 1) {
+		// id node is sw
+
+		if (idni->signals.mr == 1 && id_node->instInfo.fields.rs == idni->fields.rt) {
+			// lw then sw
+			ret = insertStall(wb_node_ptr);
+			return ret;
+		}
+
+	} else if (id_node->instInfo.destreg == 0b01) {
+		// id node is R format
+
+		if (idni->signals.mr == 1) {
+			// lw then R format
+			if (id_node->instInfo.fields.rs == idni->fields.rt) {
+				ret = insertStall(wb_node_ptr);
+				return ret;
+			}
+
+			if (id_node->instInfo.fields.rt == idni->fields.rt) {
+				ret = insertStall(wb_node_ptr);
+				return ret;
+			}
+
+		}
+
+	} 
+
+	return ret;
+
+}
+
+void wireDataForwarding(PipeNode *wb_node, int instnum) {
+	PipeNode *id_node = wb_node->next->next;
+	PipeNode *next_node = id_node->next;
+	InstInfo *id_instInfo = &(id_node->instInfo);
+	InstInfo *next_instInfo;
 	
 	int i;
-	for (i = 0; i < 3; i++) {
-		infoNext = &(threeBack->next->instInfo);
-		infoNextNext = &(threeBack->next->next->instInfo);
+	for (i = 0; i < 3 && i < instnum - 1; i++, next_node = next_node->next) {
+		next_instInfo = &(next_node->instInfo);
 
-		// sw
-		if (info->signals.mw == 1) {
-			// infoNext is I format, and it's not another sw (because sw should have a destreg of -1, b/c it doesn't write)
-			if (infoNext->destreg == 0b00) {
-				// if sw's rt = infoNext's rt
-			        // (sw reads fro rt, )
-				if (infoNext->fields.rt == info->fields.rt) {
-					info->destdata = infoNext->aluout;
+		if (next_instInfo->inst == 0) {
+			continue;
+		}
+
+		if (id_instInfo->signals.btype == 0b11) {
+			// id node is beq
+			if (next_instInfo->destreg == 0b00) {
+				if (next_instInfo->signals.mr) {
+					if (id_instInfo->fields.rs == next_instInfo->fields.rt) {
+						id_instInfo->s1data = next_instInfo->memout;
+					}
+
+					if (id_instInfo->fields.rt == next_instInfo->fields.rt) {
+						id_instInfo->s2data = next_instInfo->memout;
+					}
+				} else if (next_instInfo->signals.btype != 0b11) {
+					if (id_instInfo->fields.rs == next_instInfo->fields.rt) {
+						id_instInfo->s1data = next_instInfo->aluout;
+					}
+
+					if (id_instInfo->fields.rt == next_instInfo->fields.rt) {
+						id_instInfo->s2data = next_instInfo->aluout;
+					}
 				}
-				// if sw's rs = infoNext's rt (sw reads two registers)
-				if (infoNext->fields.rs == info->fields.rt) {
-					info->input2 = infoNext->aluout;
+			} else if (next_instInfo->destreg == 0b01) {
+				if (id_instInfo->fields.rs == next_instInfo->fields.rd) {
+					id_instInfo->s1data = next_instInfo->aluout;
 				}
-			// info is R format
-			} else if (infoNext->destreg == 0b01) {
-				// if sw's rt = infoNext's rd 
-				if (info->fields.rt == infoNext->fields.rd) {
-					info->destdata = infoNext->aluout;
-				}
-				// if sw's rs = infoNext's rd
-				if (info->fields.rs == infoNext->fields.rd) {
-					info->input1 = infoNext->aluout;
+
+				if (id_instInfo->fields.rt == next_instInfo->fields.rd) {
+					id_instInfo->s2data = next_instInfo->aluout;
 				}
 			}
 		}
 
-		if (info->signals.rw && instnum > 1 + i) {
-			if (info->destreg == 0b00) {
+		// sw
+		if (id_instInfo->signals.mw == 1) {
+			// infoNext is I format, and it's not another sw (because sw should have a destreg of -1, b/c it doesn't write)
+			if (next_instInfo->destreg == 0b00) {
+				// if sw's rt = infoNext's rt
+				if (next_instInfo->fields.rt == id_instInfo->fields.rt) {
+					if (next_instInfo->signals.mr == 0)
+						// sw and addi
+						id_instInfo->destdata = next_instInfo->aluout;
+					else
+						// sw and lw
+						id_instInfo->destdata = next_instInfo->memout;						
+				} 
+
+				// if sw's rs = infoNext's rt (sw reads two registers)
+				if (next_instInfo->fields.rs == id_instInfo->fields.rt) {
+					if (next_instInfo->signals.mr == 0)
+						// sw and addi, sw reads addi's result for the mem address
+						id_instInfo->input2 = next_instInfo->aluout;
+					else
+						// sw and lw, sw reads from what lw writes to
+						//  but does next have its memout yet?
+						id_instInfo->input2 = next_instInfo->memout;
+				}
+			// info is R format
+			} else if (next_instInfo->destreg == 0b01) {
+				// if sw's rt = infoNext's rd 
+				if (id_instInfo->fields.rt == next_instInfo->fields.rd) {
+					id_instInfo->destdata = next_instInfo->aluout;
+				}
+				// if sw's rs = infoNext's rd
+				if (id_instInfo->fields.rs == next_instInfo->fields.rd) {
+					id_instInfo->input1 = next_instInfo->aluout;
+				}
+			}
+		}
+
+		if (id_instInfo->signals.rw) {
+			if (id_instInfo->destreg == 0b00) {
 				// write to rt
 				// addi, lw
 				
 				// info is reading from the reg that infoNext wrote to
-				if ((info->fields.rs == infoNext->fields.rt && infoNext->destreg == 0b00) ||
-				 (info->fields.rs == infoNext->fields.rd && infoNext->destreg == 0b01) ){
-					info->input1 = infoNext->aluout;
-				}
-
-				// infoNext is reading from the memory location that infoNextNext wrote to
-				// i.e. mem read after mem write
-				// Must go one more forward because we have to compare the memory addresses that results from the alu op
-				// ... and that doesn't happen until the exectute stage
-				if (infoNextNext->aluout == infoNext->aluout && infoNextNext->signals.mw == 1 && infoNext->signals.mr == 1) {
-					infoNext->memout = infoNextNext->destdata;
+				if ((id_instInfo->fields.rs == next_instInfo->fields.rt && next_instInfo->destreg == 0b00) ||
+				 (id_instInfo->fields.rs == next_instInfo->fields.rd && next_instInfo->destreg == 0b01) ){
+					id_instInfo->input1 = next_instInfo->aluout;
 				}
 				
-			} else if (info->destreg == 0b01) {
+			} else if (id_instInfo->destreg == 0b01) {
 				// write to rd
 				// add, or, sub
-				if (infoNext->destreg == 0b00) {
-					if (info->fields.rs == infoNext->fields.rt) {
-						info->input1 = infoNext->aluout;
-						//printf("**************R format: info->input1 = infoNext->aluout;");
-						//printf("  (%s) aluout: %d\n", infoNext->string, infoNext->aluout);
+				if (next_instInfo->destreg == 0b00) {
+
+					if (next_instInfo->signals.mr == 0) {
+						if (id_instInfo->fields.rs == next_instInfo->fields.rt) {
+							id_instInfo->input1 = next_instInfo->aluout;
+						}
+						if (id_instInfo->fields.rt == next_instInfo->fields.rt) {
+							id_instInfo->input2 = next_instInfo->aluout;
+						}
+					} else {
+						// id_instInfo is an arith
+						// next_instInfo is lw
+						if (id_instInfo->fields.rs == next_instInfo->fields.rt) {
+							id_instInfo->input1 = next_instInfo->memout;
+							// printf("  (%s) input1: %d\n", id_instInfo->string, next_instInfo->aluout);
+						}
+						if (id_instInfo->fields.rt == next_instInfo->fields.rt) {
+							id_instInfo->input2 = next_instInfo->memout;
+							// printf("  (%s) input2: %d\n", id_instInfo->string, next_instInfo->aluout);
+						}
 					}
-					if (info->fields.rt == infoNext->fields.rt) {
-						info->input2 = infoNext->aluout;
-						//printf("**************R Format: info->input2 = infoNext->aluout;");
+
+
+				} else if (next_instInfo->destreg == 0b01) {
+					if (id_instInfo->fields.rs == next_instInfo->fields.rd) {
+						id_instInfo->input1 = next_instInfo->aluout;
+						//printf("**************R format: id_instInfo->input1 = next_instInfo->aluout;");
+						// printf("  (%s) aluout3: %d\n", next_instInfo->string, next_instInfo->aluout);
 					}
-				}
-				else if (infoNext->destreg == 0b01) {
-					if (info->fields.rs == infoNext->fields.rd) {
-						info->input1 = infoNext->aluout;
-						//printf("**************R format: info->input1 = infoNext->aluout;");
-						//printf("  (%s) aluout: %d\n", infoNext->string, infoNext->aluout);
-					}
-					if (info->fields.rt == infoNext->fields.rd) {
-						info->input2 = infoNext->aluout;
-						//printf("**************R Format: info->input2 = infoNext->aluout;");
+					if (id_instInfo->fields.rt == next_instInfo->fields.rd) {
+						id_instInfo->input2 = next_instInfo->aluout;
+						// printf("  (%s) aluout4: %d\n", next_instInfo->string, next_instInfo->aluout);
 					}
 				}
 			}
 		}
-
-		threeBack = threeBack->next;
 	}
 }
 

@@ -47,6 +47,7 @@ void decode(InstInfo *);
 void execute(InstInfo *);
 void memory(InstInfo *);
 void writeback(InstInfo *);
+void setPCWithInfo(InstInfo *instruction);
 
 /* load
  *
@@ -81,6 +82,8 @@ void fetch(InstInfo *instruction)
 {
   instruction->inst = instmem[pc];
   instruction->pc = pc;
+  instruction->s1data = 0;
+  instruction->s2data = 0;
   pc++;
 }
 
@@ -111,6 +114,7 @@ void decode(InstInfo *instruction)
 	instruction->signals.asrc = -1;
 	instruction->signals.rdst = -1;
 	instruction->signals.mtr = -1;
+	instruction->signals.btype = 0;
 
 	int func = instruction->fields.func;
 
@@ -238,11 +242,19 @@ void decode(InstInfo *instruction)
 		instruction->signals.rw = 0;
 		instruction->signals.asrc = 0;
 
-		instruction->s1data = regfile[instruction->fields.rs];
-		instruction->s2data = regfile[instruction->fields.rt];
+		if (instruction->s1data == 0) {
+			instruction->s1data = regfile[instruction->fields.rs];
+		}
+		if (instruction->s2data == 0) {
+			instruction->s2data = regfile[instruction->fields.rt];
+		}
 
-		instruction->input1 = instruction->s1data;
-		instruction->input2 = instruction->s2data;		
+		//instruction->input1 = instruction->s1data;
+		//instruction->input2 = instruction->s2data;
+
+		instruction->aluout = instruction->s1data - instruction->s2data;
+
+		//setPCWithInfo(instruction);
 
 		sprintf(instruction->string,"beq $%d, $%d, %d",
 				instruction->fields.rs, instruction->fields.rt,
@@ -322,7 +334,7 @@ void memory(InstInfo *instruction) {
 		instruction->memout = datamem[instruction->aluout];	
 	} else if (instruction->signals.mw) {
 		// sw
-		datamem[instruction->aluout] = instruction->destdata;	
+		datamem[instruction->aluout] = instruction->destdata;
 	}
 }
 
@@ -372,14 +384,15 @@ void writeback(InstInfo *instruction) {
  *
  * branch instruction will overwrite PC
 */
-void setPCWithInfo( InstInfo *instruction) {
+void setPCWithInfo(InstInfo *instruction) {
 
-  if (instruction->inst == 0) return;
+  if (instruction->inst == 0) {
+  	return;
+  }
 
 	// BType - 00 if not a branch, 11 if conditional jump, 01 if jump to an address encoded in instruction 
 	//(concatenated w/ top 4 bits of PC), 10 if jump to a register-specified location 
 	switch (instruction->signals.btype) {
-
 			case 0b01:
 				// jump to an address encoded in instruction
 				pc = instruction->fields.imm;
@@ -391,7 +404,7 @@ void setPCWithInfo( InstInfo *instruction) {
 			case 0b11:
 				// conditional jump
 				if (!instruction->aluout) {
-					pc = instruction->fields.imm;
+					pc += instruction->fields.imm - 1;
 				}
 				break;
 

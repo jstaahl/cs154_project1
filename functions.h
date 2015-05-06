@@ -49,6 +49,7 @@ void decode(InstInfo *);
 void execute(InstInfo *);
 void memory(InstInfo *);
 void writeback(InstInfo *);
+void setPCWithInfo(InstInfo *instruction);
 
 // this function is provided for you
  void print(InstInfo *, int);
